@@ -2,8 +2,9 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 
+#include "serial.h"
+
 static volatile uint8_t next_index;
-static volatile uint8_t buffer[256];
 
 void setup() {
 
@@ -70,8 +71,6 @@ ISR(TIMER1_COMPA_vect) {
 #define STOP_GAP_00 22
 #define STOP_1 23
 #define STOP_11 ( CAPTURE_BYTE_MASK | 0 )
-
-uint8_t stateMachine[256];
 
 void setupStateMachine() {
   // default to resetting state
@@ -152,11 +151,57 @@ void setupStateMachine() {
   stateMachine[ STOP_11 | BIT_1 ] = IDLE_11;
 }
 
+class Midi {
+  uint8_t buffer[3];
+  uint8_t count;
+  uint8_t remaining;
+  public:
+    Midi() {
+      count = 0;
+      remaining = 0;
+    }
+    void addByte( uint8_t byte ) {
+      if( byte & 0b10000000 ) {
+        buffer[0] = byte;
+        count = 1;
+	switch( byte ) {
+          case 0x90:
+          case 0x80:
+            remaining = 2;
+	    break;
+          default:
+            remaining = 0;
+            break;
+	}
+      } else if( remaining == 0 ) {
+        return;
+      } else {
+        buffer[count] = byte;
+        count = count + 1;
+        remaining = remaining - 1;
+      }
+      if( remaining == 0 ) {
+        // send buffer
+        if( buffer[0] == 0x90 ) {
+          if( buffer[2] == 0x00 ) {
+            PORTB = 0x00;
+	  } else {
+            PORTB = 0xFF;
+	  }
+	} else if( buffer[0] == 0x80 ) {
+          PORTB = 0x00;
+	}
+	count = 0;
+      }
+    }
+};
+
 class Serial {
   uint8_t state;
   uint8_t byte;
+  Midi midi;
   public:
-    void initialize() {
+    Serial() {
       state = INITIAL;
     }
     void addBit( uint8_t bit ) {
@@ -169,16 +214,7 @@ class Serial {
         return;
       }
       if( state & CAPTURE_BYTE_MASK ) {
-        switch( byte ) {
-          case 0b10010000:
-            PORTC = 0xFF;
-            return;
-          case 0b10000000:
-            PORTC = 0x00;
-            return;
-          default:
-            return;
-        }
+        midi.addByte(byte);
       }
     }
 };
@@ -186,22 +222,18 @@ class Serial {
 int main(void) {
 
   DDRB = 0xFF;
+  DDRC = 0xFF;
   PORTB = 0x00;
 
   setup();
   setupStateMachine();
 
-
   uint8_t index = 0;
   Serial serial1, serial2, serial3, serial4;
-  serial1.initialize();
-  serial2.initialize();
-  serial3.initialize();
-  serial4.initialize();
   for( ;; ) {
-    PORTB = 0xFF;
+    PORTC = 0xFF;
     while( index == next_index ) {}
-    PORTB = 0x00;
+    PORTC = 0x00;
     uint8_t sample = buffer[index++];
 
     uint8_t bit = sample & 0x80;
