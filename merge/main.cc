@@ -24,9 +24,9 @@ void setup() {
   sei();
 }
 
-ISR(TIMER1_COMPA_vect) {
-  buffer[ next_index++ ] = PIND;
-}
+//ISR(TIMER1_COMPA_vect) {
+//  buffer[ next_index++ ] = PIND;
+//}
 
 #define BIT_0 0
 #define BIT_1 0x80
