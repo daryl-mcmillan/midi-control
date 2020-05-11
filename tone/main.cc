@@ -16,20 +16,21 @@ void setup() {
   sei();
 }
 
+typedef void Action();
+
+template<Action action>
 class OverflowTimer {
   volatile uint16_t val;
   volatile uint16_t step;
-  uint8_t toggle;
     public:
-    OverflowTimer(uint8_t mask) {
+    OverflowTimer() {
       val = 0;
       step = 0;
-      toggle = mask;
     }
     void tick() {
       uint16_t tempval = val + step;
       if( tempval < val ) {
-        PORTB ^= toggle;
+        action();
       }
       val = tempval;
     }
@@ -39,7 +40,23 @@ class OverflowTimer {
     }
 };
 
-static OverflowTimer timer1(1), timer2(2), timer3(4), timer4(8), timer5(16), timer6(32);
+template<uint8_t bits> void PORTB_toggle() {
+  PORTB ^= bits;
+}
+
+void toggle0() { PORTB_toggle<1>(); }
+void toggle1() { PORTB_toggle<2>(); }
+void toggle2() { PORTB_toggle<4>(); }
+void toggle3() { PORTB_toggle<8>(); }
+void toggle4() { PORTB_toggle<16>(); }
+void toggle5() { PORTB_toggle<32>(); }
+
+static OverflowTimer<toggle0> timer1;
+static OverflowTimer<toggle1> timer2;
+static OverflowTimer<toggle2> timer3;
+static OverflowTimer<toggle3> timer4;
+static OverflowTimer<toggle4> timer5;
+static OverflowTimer<toggle5> timer6;
 
 ISR(TIMER1_COMPA_vect) {
   PORTC = 0xFF;
